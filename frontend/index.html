@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UpClick Task Overview</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        background: #0f172a;
+        color: #e2e8f0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      header {
+        background: linear-gradient(135deg, #0ea5e9, #6366f1);
+        padding: 2rem;
+        text-align: center;
+        color: #0f172a;
+        font-weight: bold;
+      }
+
+      main {
+        flex: 1;
+        padding: 2rem;
+        width: min(1100px, 100%);
+        margin: 0 auto;
+      }
+
+      .controls {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+      }
+
+      button {
+        background: #22d3ee;
+        color: #0f172a;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 999px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 25px rgba(34, 211, 238, 0.35);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        border-radius: 12px;
+        overflow: hidden;
+        background: rgba(15, 23, 42, 0.85);
+        backdrop-filter: blur(14px);
+        box-shadow: 0 20px 45px rgba(15, 23, 42, 0.5);
+      }
+
+      thead {
+        background: rgba(30, 41, 59, 0.9);
+      }
+
+      th,
+      td {
+        padding: 1rem;
+        text-align: left;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+      }
+
+      tbody tr:hover {
+        background: rgba(14, 165, 233, 0.08);
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.12);
+        font-size: 0.85rem;
+      }
+
+      .status-color {
+        width: 0.65rem;
+        height: 0.65rem;
+        border-radius: 50%;
+        background: #94a3b8;
+      }
+
+      .assignees {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+
+      .error-message {
+        background: rgba(239, 68, 68, 0.18);
+        border: 1px solid rgba(248, 113, 113, 0.35);
+        color: #fecaca;
+        padding: 1rem 1.25rem;
+        border-radius: 12px;
+        margin-top: 1.5rem;
+        backdrop-filter: blur(12px);
+      }
+
+      .task-link {
+        color: #38bdf8;
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      .task-link:hover {
+        text-decoration: underline;
+      }
+
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+      }
+
+      .summary-card {
+        background: rgba(15, 23, 42, 0.8);
+        border-radius: 16px;
+        padding: 1.25rem;
+        box-shadow: 0 10px 30px rgba(8, 47, 73, 0.45);
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+
+      .summary-card h2 {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #38bdf8;
+        margin: 0;
+      }
+
+      .summary-card strong {
+        font-size: 1.65rem;
+      }
+
+      .developer-table {
+        margin-top: 2rem;
+      }
+
+      .developer-table table {
+        background: rgba(15, 23, 42, 0.8);
+      }
+
+      .developer-color {
+        width: 0.75rem;
+        height: 0.75rem;
+        border-radius: 999px;
+        display: inline-block;
+        margin-right: 0.5rem;
+        vertical-align: middle;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>UpClick Task Overview</h1>
+      <p>Track ClickUp tasks, assignments, and estimates at a glance.</p>
+    </header>
+    <main>
+      <div id="root"></div>
+    </main>
+
+    <script type="module">
+      import React, { useEffect, useState } from 'https://esm.sh/react@18.2.0';
+      import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+
+      const API_BASE_URL = (window.__ENV__ && window.__ENV__.API_BASE_URL) || '';
+
+      function formatHours(value) {
+        if (value === null || value === undefined) return '—';
+        return `${value.toFixed(2)}h`;
+      }
+
+      function formatAssignees(assignees) {
+        if (!Array.isArray(assignees) || assignees.length === 0) {
+          return 'Unassigned';
+        }
+        return assignees.map((assignee) => assignee.username || assignee.email || assignee.id).join(', ');
+      }
+
+      function formatDateTime(value) {
+        if (!value) return '—';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '—';
+        return date.toLocaleString();
+      }
+
+      function computeFallbackSummary(tasks) {
+        const developerMap = new Map();
+        let totalEstimateHours = 0;
+        let totalTrackedHours = 0;
+        let totalPoints = 0;
+
+        for (const task of tasks) {
+          const estimate = typeof task.timeEstimateHours === 'number' ? task.timeEstimateHours : 0;
+          const tracked = typeof task.timeSpentHours === 'number' ? task.timeSpentHours : 0;
+          const points = typeof task.points === 'number' ? task.points : Number(task.points);
+
+          totalEstimateHours += estimate;
+          totalTrackedHours += tracked;
+          if (Number.isFinite(points)) {
+            totalPoints += points;
+          }
+
+          if (Array.isArray(task.assignees)) {
+            for (const assignee of task.assignees) {
+              if (!assignee || !assignee.id) continue;
+
+              if (!developerMap.has(assignee.id)) {
+                developerMap.set(assignee.id, {
+                  id: assignee.id,
+                  username: assignee.username || null,
+                  email: assignee.email || null,
+                  color: assignee.color || null,
+                  taskCount: 0,
+                  totalEstimateHours: 0,
+                  totalTrackedHours: 0,
+                  totalPoints: 0,
+                });
+              }
+
+              const developer = developerMap.get(assignee.id);
+              developer.taskCount += 1;
+              developer.totalEstimateHours += estimate;
+              developer.totalTrackedHours += tracked;
+              if (Number.isFinite(points)) {
+                developer.totalPoints += points;
+              }
+            }
+          }
+        }
+
+        return {
+          totalTasks: tasks.length,
+          totalEstimateHours,
+          totalTrackedHours,
+          totalPoints,
+          developers: Array.from(developerMap.values()).sort(
+            (a, b) => a.totalPoints - b.totalPoints || a.taskCount - b.taskCount
+          ),
+          generatedAt: new Date().toISOString(),
+        };
+      }
+
+      function SummaryCards({ summary }) {
+        if (!summary) return null;
+
+        return (
+          <div className="summary-grid">
+            <div className="summary-card">
+              <h2>Total Tasks</h2>
+              <strong>{summary.totalTasks}</strong>
+              <span>Last sync: {formatDateTime(summary.generatedAt)}</span>
+            </div>
+            <div className="summary-card">
+              <h2>Estimated Hours</h2>
+              <strong>{formatHours(summary.totalEstimateHours)}</strong>
+            </div>
+            <div className="summary-card">
+              <h2>Tracked Hours</h2>
+              <strong>{formatHours(summary.totalTrackedHours)}</strong>
+            </div>
+            <div className="summary-card">
+              <h2>Total Points</h2>
+              <strong>{summary.totalPoints ?? '—'}</strong>
+            </div>
+          </div>
+        );
+      }
+
+      function TaskTable({ tasks }) {
+        return (
+          <div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Task</th>
+                  <th>Status</th>
+                  <th>Assignees</th>
+                  <th>Estimate</th>
+                  <th>Tracked</th>
+                  <th>Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tasks.map((task) => (
+                  <tr key={task.id}>
+                    <td>
+                      {task.url ? (
+                        <a className="task-link" href={task.url} target="_blank" rel="noreferrer">
+                          {task.name}
+                        </a>
+                      ) : (
+                        task.name
+                      )}
+                    </td>
+                    <td>
+                      <span className="status-pill">
+                        <span
+                          className="status-color"
+                          style={{ background: task.statusColor || '#94a3b8' }}
+                        ></span>
+                        {task.status || 'Unknown'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="assignees">{formatAssignees(task.assignees)}</div>
+                    </td>
+                    <td>{formatHours(task.timeEstimateHours)}</td>
+                    <td>{formatHours(task.timeSpentHours)}</td>
+                    <td>{task.points ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
+
+      function DeveloperTable({ developers }) {
+        if (!Array.isArray(developers) || developers.length === 0) {
+          return null;
+        }
+
+        return (
+          <div className="developer-table">
+            <h2>Developer Load</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Developer</th>
+                  <th>Tasks</th>
+                  <th>Estimated</th>
+                  <th>Tracked</th>
+                  <th>Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {developers.map((developer) => {
+                  const name = developer.username || developer.email || developer.id;
+                  return (
+                    <tr key={developer.id}>
+                      <td>
+                        <span>
+                          <span
+                            className="developer-color"
+                            style={{ background: developer.color || '#38bdf8' }}
+                          ></span>
+                          {name}
+                        </span>
+                      </td>
+                      <td>{developer.taskCount}</td>
+                      <td>{formatHours(developer.totalEstimateHours)}</td>
+                      <td>{formatHours(developer.totalTrackedHours)}</td>
+                      <td>{developer.totalPoints ?? '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
+
+      function App() {
+        const [tasks, setTasks] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [error, setError] = useState(null);
+        const [summary, setSummary] = useState(null);
+
+        const fetchTasks = async () => {
+          setLoading(true);
+          setError(null);
+          try {
+            const response = await fetch(`${API_BASE_URL}/api/tasks`);
+            if (!response.ok) {
+              const message = await response.text();
+              throw new Error(message || `Request failed with ${response.status}`);
+            }
+            const payload = await response.json();
+            if (payload.error) {
+              throw new Error(payload.error);
+            }
+            setTasks(payload.tasks || []);
+            if (payload.summary) {
+              setSummary(payload.summary);
+            } else {
+              setSummary(computeFallbackSummary(payload.tasks || []));
+            }
+          } catch (err) {
+            console.error(err);
+            setError(err.message || 'Failed to fetch tasks.');
+          } finally {
+            setLoading(false);
+          }
+        };
+
+        useEffect(() => {
+          fetchTasks();
+          const interval = setInterval(fetchTasks, 60_000);
+          return () => clearInterval(interval);
+        }, []);
+
+        return (
+          <div>
+            <div className="controls">
+              <button onClick={fetchTasks} disabled={loading}>
+                {loading ? 'Loading…' : 'Refresh'}
+              </button>
+              {loading && <span>Loading tasks…</span>}
+            </div>
+            {summary && !error && <SummaryCards summary={summary} />}
+            {error ? (
+              <div className="error-message">{error}</div>
+            ) : (
+              <>
+                <TaskTable tasks={tasks} />
+                <DeveloperTable developers={summary?.developers} />
+              </>
+            )}
+          </div>
+        );
+      }
+
+      const root = createRoot(document.getElementById('root'));
+      root.render(React.createElement(App));
+    </script>
+  </body>
+</html>

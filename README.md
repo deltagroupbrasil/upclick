@@ -1,125 +1,86 @@
-# ClickUp Task Manager
+# UpClick Prototype
 
-A management interface for tracking dev team tasks, hours, and points integrated with ClickUp.
+This repository provides a minimal foundation for a ClickUp-integrated task management interface. It includes:
 
-## Features
+- A Node.js backend that retrieves tasks from the ClickUp API and exposes them via REST endpoints with aggregate summaries.
+- A lightweight React frontend (served as a static file) that displays task information, developer load, and keeps it up to date.
+- A webhook endpoint ready to receive live updates from ClickUp.
 
-### Core Features
-- Real-time task synchronization with ClickUp
-- Task assignment based on lowest point allocation
-- Weekly hour/point tallying for payroll
-- Live updates via webhooks
-- Team member workload visualization
+## Getting Started
 
-### Enhanced Features
-- **CSV Export** - Export tasks and tallies for external processing
-- **Advanced Filtering** - Search and filter tasks by status, assignee, points
-- **Flexible Sorting** - Sort by name, points, status, due date, or last updated
-- **Payout Calculator** - Calculate payouts per point or per hour
-- **Task Details** - Click any task to view full information in modal
-- **Real-time Stats** - Live counts of total, filtered, and active tasks
+### 1. Prerequisites
 
-## Project Structure
+- Node.js 18 or newer (for native `fetch` support and the `--watch` flag).
+- A ClickUp API token with access to the space/list you want to display.
 
-```
-clickup-task-manager/
-├── backend/          # Node.js/Express API
-├── frontend/         # Next.js React application
-├── .env.example      # Environment variables template
-└── package.json      # Root package for monorepo
-```
+### 2. Environment Variables
 
-## Setup
-
-1. **Clone and install dependencies:**
-   ```bash
-   npm install
-   ```
-
-2. **Configure environment variables:**
-   - Copy `.env.example` to `.env`
-   - Add your ClickUp API token
-   - Update team and space IDs
-
-3. **Setup database:**
-   ```bash
-   cd backend
-   npm run db:migrate
-   ```
-
-4. **Start development servers:**
-   ```bash
-   npm run dev
-   ```
-
-   - Backend: http://localhost:3001
-   - Frontend: http://localhost:3000
-
-## Getting Your ClickUp API Token
-
-1. Go to ClickUp Settings > Apps
-2. Click "Generate" under API Token
-3. Copy the token to your `.env` file
-
-## Configuration
-
-### ClickUp Setup
-- Team ID: Found in your ClickUp URL
-- Space ID: Found in your ClickUp board URL
-- Webhook Secret: Generate a random string for security
-
-### Database
-The application uses PostgreSQL. Update `DATABASE_URL` in `.env` with your connection string.
-
-## Development
-
-- `npm run dev` - Start both backend and frontend in development mode
-- `npm run dev:backend` - Start only backend server
-- `npm run dev:frontend` - Start only frontend application
-- `npm run build` - Build both applications for production
-
-## Tech Stack
-
-- **Backend:** Node.js, Express, TypeScript, PostgreSQL
-- **Frontend:** Next.js, React, TypeScript, Tailwind CSS
-- **API Integration:** ClickUp API v2
-- **Real-time:** WebSockets, ClickUp Webhooks
-
-## Documentation
-
-- **QUICK_START.md** - Get running in 3 minutes
-- **SETUP.md** - Detailed setup guide
-- **PROJECT_SUMMARY.md** - Technical architecture
-- **ENHANCEMENTS.md** - All optional features explained
-- **FINAL_SUMMARY.md** - Complete project overview
-
-## Quick Commands
+Copy the example environment file and update it with your credentials:
 
 ```bash
-# Install dependencies
-npm install
-
-# Start everything
-npm run dev
-
-# Start backend only
-npm run dev:backend
-
-# Start frontend only
-npm run dev:frontend
-
-# Build for production
-npm run build
+cp .env.example .env
 ```
 
-## Usage
+Then edit `.env`:
 
-1. Open http://localhost:3000
-2. Click "Sync from ClickUp" to load your tasks
-3. Use filters and search to find specific tasks
-4. Click on any task to see full details
-5. Navigate to /tallies for weekly payroll calculations
-6. Configure payout rates and export to CSV
+```
+PORT=4000
+CLICKUP_API_TOKEN=your_clickup_token
+CLICKUP_LIST_ID=target_list_id
+```
+
+### 3. Run the backend
+
+```bash
+cd backend
+npm run dev
+```
+
+The backend exposes two endpoints:
+
+- `GET /api/tasks` – fetch the latest tasks from the configured ClickUp list.
+- `POST /api/webhook` – accepts ClickUp webhook payloads and logs them for now.
+
+### 4. Open the frontend
+
+The frontend is a static file located at `frontend/index.html`. You can open it directly in your browser or serve it through any static file server. If the backend runs on a different origin, set `window.__ENV__ = { API_BASE_URL: 'http://localhost:4000' };` before the script loads, or host the file alongside the backend.
+
+When connected, the dashboard displays:
+
+- A KPI row with total task count, estimated/actual hours, and point totals.
+- The task table with status, assignees, estimates, tracked time, and points.
+- A developer load table that aggregates hours and points per assignee to help assign work to the lowest-point teammate.
+
+### 5. Configure ClickUp Webhooks
+
+Once the backend is reachable from the internet, register a webhook with ClickUp to deliver live updates:
+
+```http
+POST https://api.clickup.com/api/v2/webhook
+Authorization: <CLICKUP_API_TOKEN>
+Content-Type: application/json
+
+{
+  "endpoint": "https://your-domain.com/api/webhook",
+  "events": [
+    "taskCreated",
+    "taskUpdated",
+    "taskAssigneeUpdated",
+    "taskStatusUpdated",
+    "taskTimeEstimateUpdated"
+  ],
+  "space_id": "<YOUR_SPACE_ID>"
+}
+```
+
+The current implementation logs the payloads; extend it to persist updates to your database as you evolve the system.
+
+## Next Steps
+
+- Persist task snapshots and developer point totals in a database (e.g., PostgreSQL).
+- Build assignment automation that selects the developer with the lowest points.
+- Harden the webhook endpoint with signature validation and retry handling.
+- Package the frontend with a build pipeline (Vite, Next.js, etc.) for production.
 
 ## License
 
